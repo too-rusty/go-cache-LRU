@@ -13,13 +13,15 @@ type DummyMap struct {
 }
 
 func TestLRUOrder(t *testing.T) {
-	capacity := uint(3)
+	capacity := uint(10)
 
 	cache := NewCache[int64]().WithCapacity(capacity)
 	m := DummyMap{timestamps: make(map[int64][]time.Time)}
 
 	var wg sync.WaitGroup
-	for i := int64(0); i < 10; i++ {
+	n := int64(10000)
+
+	for i := int64(0); i < n; i++ {
 		wg.Add(1)
 
 		func(value int64) {
@@ -81,7 +83,8 @@ func TestLRUConcurrentFullCapacity(t *testing.T) {
 	cache := NewCache[int64]().WithCapacity(capacity)
 
 	var wg sync.WaitGroup
-	for i := int64(0); i < 100000; i++ {
+	n := int64(10000)
+	for i := int64(0); i < n; i++ {
 		wg.Add(1)
 		go func(value int64) {
 			defer wg.Done()
@@ -103,7 +106,8 @@ func TestLRUConcurrentLesserCapacity(t *testing.T) {
 
 	var wg sync.WaitGroup
 	var mxVal int64 = 10
-	for i := int64(0); i < 100000; i++ {
+	n := int64(10000)
+	for i := int64(0); i < n; i++ {
 		wg.Add(1)
 		go func(value int64) {
 			defer wg.Done()
@@ -114,6 +118,28 @@ func TestLRUConcurrentLesserCapacity(t *testing.T) {
 
 	if cache.Len() != uint(mxVal) {
 		t.Errorf("got: %v, want: %v", cache.Len(), mxVal)
+	}
+
+}
+
+func TestLRUConcurrentNoCapacity(t *testing.T) {
+
+	cache := NewCache[int64]()
+
+	var wg sync.WaitGroup
+	n := int64(10000)
+
+	for i := int64(0); i < n; i++ {
+		wg.Add(1)
+		go func(value int64) {
+			defer wg.Done()
+			cache.Add(value)
+		}(i)
+	}
+	wg.Wait()
+
+	if cache.Len() != uint(n) {
+		t.Errorf("got: %v, want: %v", cache.Len(), n)
 	}
 
 }
