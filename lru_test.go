@@ -34,7 +34,7 @@ func TestLRUOrder(t *testing.T) {
 
 			value = value % int64(cache.Capacity())
 
-			cache.AddLruElement(LruElement[int64]{value, time.Unix(momentUnix, 0)})
+			cache.AddLruElement(LruElement[int64]{V: value, T: time.Unix(momentUnix, 0)})
 
 			m.mu.Lock()
 			defer m.mu.Unlock()
@@ -101,7 +101,7 @@ func TestLRUConcurrentFullCapacity(t *testing.T) {
 
 }
 
-func TestLRUConcurrentLesserCapacity(t *testing.T) {
+func TestLRUConcurrentUnderCapacity(t *testing.T) {
 
 	capacity := uint(100)
 	cache := NewCache[int64]().WithCapacity(capacity)
@@ -169,7 +169,7 @@ func TestLRUOrderConcurrent(t *testing.T) {
 
 			value = value % int64(cache.Capacity())
 			momentUnix := time.Now().Unix()
-			cache.AddLruElement(LruElement[int64]{value, time.Unix(momentUnix, 0)})
+			cache.AddLruElement(LruElement[int64]{V: value, T: time.Unix(momentUnix, 0)})
 
 			mu.Lock()
 			defer mu.Unlock()

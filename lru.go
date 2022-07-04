@@ -8,6 +8,7 @@ import (
 
 type elementWrapper struct {
 	element   *list.Element
+	data      any
 	timestamp time.Time
 }
 
@@ -19,8 +20,9 @@ type lruCache[Value comparable] struct {
 }
 
 type LruElement[Value comparable] struct {
-	V Value
-	T time.Time
+	V    Value
+	T    time.Time
+	Data any // can be extra metadata
 }
 
 // initiate a new cache
@@ -50,13 +52,23 @@ func (cache *lruCache[Value]) Len() uint {
 	return uint(cache.list.Len())
 }
 
+// Acknowledge get if any get operation performed on the cache
+func (cache *lruCache[Value]) AcknowledgeGet(value Value) LruElement[Value] {
+	return cache.AddLruElement(LruElement[Value]{V: value, T: time.Now()})
+}
+
+// Identity function for now, can store extra metadata too; TODO: use cache as kv store
+func (cache *lruCache[Value]) Get(value Value) LruElement[Value] {
+	return cache.AddLruElement(LruElement[Value]{V: value, T: time.Now()})
+}
+
 // add a value with default timestamp as time.Now
-func (cache *lruCache[Value]) Add(value Value) {
-	cache.AddLruElement(LruElement[Value]{V: value, T: time.Now()})
+func (cache *lruCache[Value]) Add(value Value) LruElement[Value] {
+	return cache.AddLruElement(LruElement[Value]{V: value, T: time.Now()})
 }
 
 // add manually with timestamp if time.Now is not threadsafe
-func (cache *lruCache[Value]) AddLruElement(data LruElement[Value]) {
+func (cache *lruCache[Value]) AddLruElement(data LruElement[Value]) LruElement[Value] {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 
@@ -83,6 +95,8 @@ func (cache *lruCache[Value]) AddLruElement(data LruElement[Value]) {
 
 	}
 
+	return data
+
 }
 
 // Remove all elements from the cache before a certain timestamp
@@ -96,7 +110,7 @@ func (cache *lruCache[Value]) RemoveBefore(moment time.Time) (ret []LruElement[V
 		if ptr.timestamp.After(moment) {
 			break
 		}
-		ret = append(ret, LruElement[Value]{key, ptr.timestamp})
+		ret = append(ret, LruElement[Value]{V: key, T: ptr.timestamp})
 		cache.list.Remove(ptr.element)
 		delete(cache.lastAccess, key)
 	}
@@ -112,7 +126,7 @@ func (cache *lruCache[Value]) RemoveFirstN(n int) (ret []LruElement[Value]) {
 		head := cache.list.Front()
 		key := head.Value.(Value)
 		tstamp := cache.lastAccess[key].timestamp
-		ret = append(ret, LruElement[Value]{key, tstamp})
+		ret = append(ret, LruElement[Value]{V: key, T: tstamp})
 		cache.list.Remove(head)
 		delete(cache.lastAccess, key)
 		n--

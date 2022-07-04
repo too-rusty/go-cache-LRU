@@ -10,3 +10,13 @@ func main() {
     cache.Add(42)
 }
 ```
+
+
+https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_recently_used_(LRU)
+
+Get and put operations should update the cache
+currently only put operation is supported
+
+## TODO
+
+support get operation along with put
