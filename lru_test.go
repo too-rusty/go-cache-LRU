@@ -1,6 +1,7 @@
 package LRU
 
 import (
+	"fmt"
 	"math/rand"
 	"sort"
 	"sync"
@@ -146,14 +147,14 @@ func TestLRUConcurrentNoCapacity(t *testing.T) {
 }
 
 func TestLRUOrderConcurrent(t *testing.T) {
-	capacity := uint(2)
+	capacity := uint(100)
 
 	cache := NewCache[int64]().WithCapacity(capacity)
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
-	n := int64(10)
+	n := int64(1100)
 
 	var timestamps []int64
 
@@ -185,11 +186,19 @@ func TestLRUOrderConcurrent(t *testing.T) {
 		return timestamps[i] < timestamps[j]
 	})
 
-	cacheValues := cache.ClearCache()
-	timestamps = timestamps[len(timestamps)-len(cacheValues):]
+	cacheValuesTimestamps := func() (ret []int64) {
+		for _, v := range cache.ClearCache() {
+			ret = append(ret, v.T.Unix())
+		}
+		return
+	}()
+	timestamps = timestamps[len(timestamps)-len(cacheValuesTimestamps):]
 
-	for i := 0; i < len(cacheValues); i++ {
-		if cacheValues[i].T.Unix() != timestamps[i] {
+	fmt.Println(cacheValuesTimestamps)
+	fmt.Println(timestamps)
+
+	for i := 0; i < len(cacheValuesTimestamps); i++ {
+		if cacheValuesTimestamps[i] != timestamps[i] {
 			t.Error("value mismatch")
 		}
 	}
