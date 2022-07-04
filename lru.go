@@ -11,65 +11,73 @@ type elementWrapper struct {
 	timestamp time.Time
 }
 
-type lruCache[T comparable] struct {
+type lruCache[Value comparable] struct {
 	list       *list.List
-	lastAccess map[T]elementWrapper
+	lastAccess map[Value]elementWrapper
 	capacity   uint
 	mu         sync.Mutex
 }
 
+type LruElement[Value comparable] struct {
+	V Value
+	T time.Time
+}
+
 // initiate a new cache
-func NewCache[T comparable]() *lruCache[T] {
-	return &lruCache[T]{
+func NewCache[Value comparable]() *lruCache[Value] {
+	return &lruCache[Value]{
 		list:       list.New(),
-		lastAccess: make(map[T]elementWrapper),
+		lastAccess: make(map[Value]elementWrapper),
 	}
 }
 
 // Set capacity of the cache, if 0 then it's infinite
-func (cache *lruCache[T]) WithCapacity(capacity uint) *lruCache[T] {
+func (cache *lruCache[Value]) WithCapacity(capacity uint) *lruCache[Value] {
 	cache.capacity = capacity
 	return cache
 }
 
 // Capacity of the cache
-func (cache *lruCache[T]) Capacity() uint {
+func (cache *lruCache[Value]) Capacity() uint {
 	return cache.capacity
 }
 
 // Current Length of the cache
-func (cache *lruCache[T]) Len() uint {
+func (cache *lruCache[Value]) Len() uint {
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+
 	return uint(cache.list.Len())
 }
 
 // add a value with default timestamp as time.Now
-func (cache *lruCache[T]) Add(value T) {
-	cache.AddWithTimeStamp(value, time.Now())
+func (cache *lruCache[Value]) Add(value Value) {
+	cache.AddLruElement(LruElement[Value]{V: value, T: time.Now()})
 }
 
 // add manually with timestamp if time.Now is not threadsafe
-func (cache *lruCache[T]) AddWithTimeStamp(value T, moment time.Time) {
+func (cache *lruCache[Value]) AddLruElement(data LruElement[Value]) {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 
-	if moment.Equal(time.Time{}) {
-		moment = time.Now()
+	if data.T.Equal(time.Time{}) {
+		data.T = time.Now()
 	}
 
-	if ptr, found := cache.lastAccess[value]; found {
+	if ptr, found := cache.lastAccess[data.V]; found {
 		cache.list.Remove(ptr.element)
 	}
 
-	newElement := cache.list.PushBack(value)
-	cache.lastAccess[value] = elementWrapper{
+	newElement := cache.list.PushBack(data.V)
+	cache.lastAccess[data.V] = elementWrapper{
 		element:   newElement,
-		timestamp: moment,
+		timestamp: data.T,
 	}
 
 	if int(cache.capacity) > 0 && cache.list.Len() > int(cache.capacity) {
 		// remove any extra element from the cache
 		head := cache.list.Front()
-		key, _ := head.Value.(T)
+		key, _ := head.Value.(Value)
 		cache.list.Remove(head)
 		delete(cache.lastAccess, key)
 
@@ -78,17 +86,17 @@ func (cache *lruCache[T]) AddWithTimeStamp(value T, moment time.Time) {
 }
 
 // Remove all elements from the cache before a certain timestamp
-func (cache *lruCache[T]) RemoveBefore(moment time.Time) (ret []T) {
+func (cache *lruCache[Value]) RemoveBefore(moment time.Time) (ret []LruElement[Value]) {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 
 	for cache.list.Len() > 0 {
-		key := cache.list.Front().Value.(T)
+		key := cache.list.Front().Value.(Value)
 		ptr := cache.lastAccess[key]
 		if ptr.timestamp.After(moment) {
 			break
 		}
-		ret = append(ret, key)
+		ret = append(ret, LruElement[Value]{key, ptr.timestamp})
 		cache.list.Remove(ptr.element)
 		delete(cache.lastAccess, key)
 	}
@@ -96,18 +104,24 @@ func (cache *lruCache[T]) RemoveBefore(moment time.Time) (ret []T) {
 }
 
 // Remove first n elements from the cache
-func (cache *lruCache[T]) RemoveFirstN(n int) (ret []T) {
+func (cache *lruCache[Value]) RemoveFirstN(n int) (ret []LruElement[Value]) {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 
 	for cache.list.Len() > 0 && n > 0 {
 		head := cache.list.Front()
-		key := head.Value.(T)
-		ret = append(ret, key)
+		key := head.Value.(Value)
+		tstamp := cache.lastAccess[key].timestamp
+		ret = append(ret, LruElement[Value]{key, tstamp})
 		cache.list.Remove(head)
 		delete(cache.lastAccess, key)
 		n--
 	}
 
 	return
+}
+
+// Remove first n elements from the cache
+func (cache *lruCache[Value]) ClearCache() []LruElement[Value] {
+	return cache.RemoveFirstN(int(cache.Len()))
 }

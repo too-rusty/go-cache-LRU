@@ -1,6 +1,7 @@
 package LRU
 
 import (
+	"math/rand"
 	"sort"
 	"sync"
 	"testing"
@@ -32,7 +33,7 @@ func TestLRUOrder(t *testing.T) {
 
 			value = value % int64(cache.Capacity())
 
-			cache.AddWithTimeStamp(value, time.Unix(momentUnix, 0))
+			cache.AddLruElement(LruElement[int64]{value, time.Unix(momentUnix, 0)})
 
 			m.mu.Lock()
 			defer m.mu.Unlock()
@@ -70,7 +71,7 @@ func TestLRUOrder(t *testing.T) {
 	}
 
 	for i := 0; i < len(tmpArr); i++ {
-		if cacheValues[i] != tmpArr[i].value {
+		if cacheValues[i].V != tmpArr[i].value {
 			t.Error("value mismatch")
 		}
 	}
@@ -142,4 +143,54 @@ func TestLRUConcurrentNoCapacity(t *testing.T) {
 		t.Errorf("got: %v, want: %v", cache.Len(), n)
 	}
 
+}
+
+func TestLRUOrderConcurrent(t *testing.T) {
+	capacity := uint(2)
+
+	cache := NewCache[int64]().WithCapacity(capacity)
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	n := int64(10)
+
+	var timestamps []int64
+
+	for i := int64(0); i < n; i++ {
+
+		wg.Add(1)
+
+		go func(value int64) {
+			defer wg.Done()
+
+			time.Sleep(time.Duration(rand.Int()%500) * time.Millisecond)
+
+			value = value % int64(cache.Capacity())
+			momentUnix := time.Now().Unix()
+			cache.AddLruElement(LruElement[int64]{value, time.Unix(momentUnix, 0)})
+
+			mu.Lock()
+			defer mu.Unlock()
+			timestamps = append(timestamps, momentUnix)
+
+		}(i)
+
+		time.Sleep(time.Duration(rand.Int()%50) * time.Millisecond)
+
+	}
+	wg.Wait()
+
+	sort.Slice(timestamps, func(i, j int) bool {
+		return timestamps[i] < timestamps[j]
+	})
+
+	cacheValues := cache.ClearCache()
+	timestamps = timestamps[len(timestamps)-len(cacheValues):]
+
+	for i := 0; i < len(cacheValues); i++ {
+		if cacheValues[i].T.Unix() != timestamps[i] {
+			t.Error("value mismatch")
+		}
+	}
 }
